@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
@@ -51,16 +52,28 @@ public class SignIn extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sign_in);
+        Typeface font = Typeface.createFromAsset(getAssets(), "fonts/restaurant_font.otf");
+
 
         emailInput = (MaterialEditText) findViewById(R.id.emailSignIn);
         passwordInput = (MaterialEditText) findViewById(R.id.passwordSignIn);
 
         btnSignIn = (Button) findViewById(R.id.signInBtn);
         rememberMeCb = (CheckBox) findViewById(R.id.rememberMeCb);
+
+        rememberMeCb.setTypeface(font); //set rememberMeCb font
+
         forgotPassword = (TextView) findViewById(R.id.forgotPassword);
+
+
+
+        forgotPassword.setTypeface(font); //set forgotpassword font
+        btnSignIn.setTypeface(font); //set signin font
+        rememberMeCb.setTypeface(font);
 
         signInProgressBar = (ProgressBar) findViewById(R.id.signInProgressBar);
         signInProgressBar.setVisibility(View.INVISIBLE);
+
 
         forgotPasswordPopup = new Dialog(this);
 
@@ -147,6 +160,7 @@ public class SignIn extends AppCompatActivity {
 
                 //Check if email inputted is .edu & user exists in db.
                 if (!(signInEmail.equals("")) && dataSnapshot.child(signInEmail).exists()) {
+
                     //Get User information.
                     User user = dataSnapshot.child(signInEmail).getValue(User.class);
                     user.setEmail(signInEmail);
@@ -157,6 +171,8 @@ public class SignIn extends AppCompatActivity {
                         Paper.book().write(Common.USER_KEY, signInEmail);
                         Paper.book().write(Common.PWD_KEY, signInPassword);
                         Paper.book().write(Common.NAME_KEY, user.getName());
+                        Paper.book().write(Common.FLAG_COUNT, user.getFlagCount());
+
                     }
 
                     if (!(user.getPassword().equals(signInPassword))) {
@@ -173,6 +189,7 @@ public class SignIn extends AppCompatActivity {
             }
 
             @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) { }
             public void onCancelled(@NonNull DatabaseError databaseError) {
             }
         });
@@ -197,6 +214,8 @@ public class SignIn extends AppCompatActivity {
                     if (!task.isSuccessful()) {
                         if (task.getException() instanceof FirebaseAuthInvalidCredentialsException) {
                             Toast.makeText(getApplicationContext(), "Your email and/or password may be incorrect!", Toast.LENGTH_SHORT).show();
+                        }
+                        else if (task.getException() instanceof FirebaseAuthInvalidUserException) {
                         } else if (task.getException() instanceof FirebaseAuthInvalidUserException) {
                             Toast.makeText(getApplicationContext(), "No account found for the email address!", Toast.LENGTH_SHORT).show();
                         } else {
@@ -214,10 +233,10 @@ public class SignIn extends AppCompatActivity {
 
     private void checkIfEmailVerified() {
         FirebaseUser user = firebaseAuth.getCurrentUser();
+
         if (user.isEmailVerified() == true) {
             getUserInfoFromDB();
-        }
-        else {
+        } else {
             firebaseAuth.signOut();
             Toast.makeText(getApplicationContext(), "Verify your email!", Toast.LENGTH_SHORT).show();
         }
@@ -245,4 +264,5 @@ public class SignIn extends AppCompatActivity {
 
         return formatted;
     }
+
 }

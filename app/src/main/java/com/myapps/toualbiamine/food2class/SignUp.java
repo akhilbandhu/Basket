@@ -1,6 +1,7 @@
 package com.myapps.toualbiamine.food2class;
 
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -45,24 +46,43 @@ public class SignUp extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sign_up);
 
+        Typeface font = Typeface.createFromAsset(getAssets(), "fonts/restaurant_font.otf");
+
+
         emailInput = (MaterialEditText) findViewById(R.id.emailSignUp);
         nameInput = (MaterialEditText) findViewById(R.id.nameSignUp);
         passwordInput = (MaterialEditText) findViewById(R.id.passwordSignUp);
+
 
         signUpBtn = (Button) findViewById(R.id.signUpBtn);
 
         signUpProgressBar = (ProgressBar) findViewById(R.id.signUpProgressBar);
         signUpProgressBar.setVisibility(View.INVISIBLE);
 
+        emailInput.setTypeface(font);
+        nameInput.setTypeface(font);
+        passwordInput.setTypeface(font);
+        signUpBtn.setTypeface(font);
+
+
         //Initialize Firebase.
         database = FirebaseDatabase.getInstance();
         tableUser = database.getReference("Users");  //Get the table User created in the db.
         firebaseAuth = FirebaseAuth.getInstance();
 
-
         signUpBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                 signUpEmail = convertToFirebaseFormat(emailInput.getText().toString());
+                 fullSignUpEmail = emailInput.getText().toString();
+                 signUpName  = nameInput.getText().toString();
+                 signUpPassword = passwordInput.getText().toString();
+                 Log.i(TAG, "Sign Up Email = " + signUpEmail);
+
+                 addUserToRealTimeDB();
+            }
+        });
+
                 signUpEmail = convertToFirebaseFormat(emailInput.getText().toString());
                 fullSignUpEmail = emailInput.getText().toString();
                 signUpName = nameInput.getText().toString();
@@ -85,6 +105,8 @@ public class SignUp extends AppCompatActivity {
                             Log.d(TAG, "Auth Sign Up : OK");
                             Toast.makeText(getApplicationContext(), "Account created. Check your email!", Toast.LENGTH_SHORT).show();
                             sendVerificationEmail();
+                        }
+                        else {
                         } else {
                             Toast.makeText(getApplicationContext(), task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                             Log.d(TAG, "Auth Sign Up : ERR " + task.getException().getMessage());
@@ -101,18 +123,13 @@ public class SignUp extends AppCompatActivity {
                 .addOnCompleteListener(this, new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task task) {
-
                         if (task.isSuccessful()) {
-
                             FirebaseAuth.getInstance().signOut();
-
                             Intent goToMain = new Intent(getApplicationContext(), MainActivity.class);
                             startActivity(goToMain);
-
                             finish();
-
-
-                        } else {
+                        }
+                        else {
                             Log.e(TAG, "sendEmailVerification", task.getException());
                             Toast.makeText(getApplicationContext(),
                                     "Failed to send verification email.",
@@ -153,6 +170,7 @@ public class SignUp extends AppCompatActivity {
 
                 //Everything is good => sign up the user.
                 else {
+                    User newUser = new User(signUpEmail, signUpName, signUpPassword, "0", false);
                     User newUser = new User(signUpEmail, signUpName, signUpPassword);
                     tableUser.child(signUpEmail).setValue(newUser);
                     Log.d(TAG, "DB Sign Up : OK");
@@ -161,6 +179,35 @@ public class SignUp extends AppCompatActivity {
             }
 
             @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) { }
+        });
+    }
+
+
+    //SUU uses weird format for email -> mohamedtoualbi@students.suu.edu.
+     private String convertToFirebaseFormat(String email) {
+        String formatted = "";
+        String domain = "";
+
+        //Faster to check from the end that going through the entire string.
+        for(int i=0; i<email.length(); i++) {
+            char c = email.charAt(i);
+            if(c == '@') {
+                formatted = email.substring(0, i);
+                domain = email.substring(i+1, email.length());
+                Log.i(TAG, "Domain = " + domain);
+                break;
+            }
+        }
+
+        if(!(domain.equals("students.suu.edu"))) {
+            return "";
+        }
+
+        return formatted.toLowerCase();
+    }
+
+}
             public void onCancelled(@NonNull DatabaseError databaseError) {
             }
         });

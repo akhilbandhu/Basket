@@ -1,21 +1,26 @@
 package com.myapps.toualbiamine.food2class;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.DialogInterface;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.helper.ItemTouchHelper;
+import android.util.Log;
 import android.view.View;
 import android.widget.*;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.*;
 import com.myapps.toualbiamine.food2class.Application.DatabaseApp;
 import com.myapps.toualbiamine.food2class.Common.Common;
 import com.myapps.toualbiamine.food2class.Model.Order;
 import com.myapps.toualbiamine.food2class.Model.Request;
+import com.myapps.toualbiamine.food2class.Model.User;
 import com.myapps.toualbiamine.food2class.Providers.IOrderProvider;
 import com.myapps.toualbiamine.food2class.Utils.SwipeToDeleteCallback;
 import com.myapps.toualbiamine.food2class.ViewHolder.CartAdapter;
@@ -23,6 +28,7 @@ import com.rengwuxian.materialedittext.MaterialEditText;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class Cart extends AppCompatActivity {
@@ -32,6 +38,7 @@ public class Cart extends AppCompatActivity {
 
     FirebaseDatabase database;
     DatabaseReference requests;
+    DatabaseReference requestsUsers;
 
     TextView mealSwipeTotal;
     Button placeOrderBtn;
@@ -48,10 +55,14 @@ public class Cart extends AppCompatActivity {
     ImageButton closePopupBtn;
     EditText restrictionEditText;
 
+    int flagCount = 0;          //Put it here because we cannot access it from function to check flag count below.
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_cart);
+
+        Typeface font = Typeface.createFromAsset(getAssets(), "fonts/restaurant_font.otf");
 
         //Initialize Firebase.
         database = FirebaseDatabase.getInstance();
@@ -69,48 +80,67 @@ public class Cart extends AppCompatActivity {
         mealSwipeTotal = (TextView) findViewById(R.id.mealSwipeTotal);
         placeOrderBtn = (Button) findViewById(R.id.placeOrderBtn);
 
+        mealSwipeTotal.setTypeface(font);
+        placeOrderBtn.setTypeface(font);
+
         loadCart();
+
 
         placeOrderBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
                 cartData = orderProvider.getAll();
-
                 if(cartData.isEmpty() == false) {
-                    showDietaryRestrictionPopup(cartData);
+                    checkUserFlagCount(Common.currentUser.getEmail());      //All other functions are called from here bc asynchronous calls are made by Firebase
                 }
                 else {
                     Toast.makeText(getApplicationContext(), "Your cart is empty.", Toast.LENGTH_SHORT).show();
                 }
-
             }
         });
+    }
 
+    private HashMap<String, List<Order>> filterOrdersByRestaurant(List<Order> cartData) {
+        HashMap<String, List<Order>> orderRestaurantMap = new HashMap<>();
 
-
+        for(Order order : cartData) {
+            String restaurantID = order.getRestaurantID();
+            if(orderRestaurantMap.containsKey(restaurantID)) {
+                List<Order> orders = orderRestaurantMap.get(restaurantID);
+                orders.add(order);
+                orderRestaurantMap.put(restaurantID, orders);
+            }
+            else {
+                List<Order> orders = new ArrayList<>();
+                orders.add(order);
+                orderRestaurantMap.put(restaurantID, orders);
+            }
+        }
+        return orderRestaurantMap;
     }
 
     private void placeOrder(List<Order> cartData, String restriction) {
+        HashMap<String, List<Order>> ordersByRestaurants = filterOrdersByRestaurant(cartData);
 
-        Request newRequest = new Request(Common.currentUser.getEmail(), Common.currentUser.getName(),
-                restriction, cartData);
-
-        //Submit Order -> use CurrentSystemMillis as key!
-        requests.child(String.valueOf(System.currentTimeMillis())).setValue(newRequest);
+        //We create a new Request for each restaurant the user is ordering from.
+        for(String restaurantID : ordersByRestaurants.keySet()) {
+            List<Order> foodOrdered = ordersByRestaurants.get(restaurantID);
+            Request newRequest = new Request(Common.currentUser.getEmail(), Common.currentUser.getName(), restriction, foodOrdered, restaurantID);
+            //DatabaseReference restaurantDB = database.getReference("Requests/"+restaurantID);       //Pushes to the right restaurant store
+            requests.push().setValue(newRequest);
+           // restaurantDB.push().setValue(newRequest);
+        }
 
         for(Order order : cartData) {
             orderProvider.delete(order);
         }
 
         loadCart();
-
         Toast.makeText(getApplicationContext(), "Order submitted!", Toast.LENGTH_SHORT).show();
-
     }
 
-    private void showDietaryRestrictionPopup(final List<Order> cartData) {
 
+    private void showDietaryRestrictionPopup(final List<Order> cartData) {
         //Show the popup.
         dietaryRestrictionPopup.setContentView(R.layout.popup_place_order_msg);
         dietaryRestrictionPopup.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -130,16 +160,50 @@ public class Cart extends AppCompatActivity {
         placeOrderPopupBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
                 String restriction = restrictionEditText.getText().toString();
                 placeOrder(cartData, restriction);
                 dietaryRestrictionPopup.dismiss();
+            }
+        });
+    }
+
+    private void displayBanDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(Cart.this);
+        builder.setTitle(Common.BAN_TITLE);
+        builder.setMessage(Common.BAN_MSG);
+        builder.setNeutralButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                finish();
+            }
+        });
+        AlertDialog alertDialog = builder.create();
+        alertDialog.show();
+    }
+
+    private void checkUserFlagCount(String email) {
+        DatabaseReference users = database.getReference("Users");
+        Log.e("TAG", "email = " + email);
+        users.child(email).child("flagCount").addListenerForSingleValueEvent(new ValueEventListener() {      //This retrieves the value flagCount for the child with the key email
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                Log.e("TAG", "Inside Listener, flagCount = " + dataSnapshot.getValue().toString());
+                flagCount = Integer.parseInt(dataSnapshot.getValue().toString());
+                if(flagCount < 3) {
+                    showDietaryRestrictionPopup(cartData);
+                }
+                else {
+                    displayBanDialog();
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
 
             }
         });
-
-
     }
+
 
     public void loadCart() {
         cart = orderProvider.getAll();
@@ -147,12 +211,6 @@ public class Cart extends AppCompatActivity {
         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new SwipeToDeleteCallback(adapter));
         itemTouchHelper.attachToRecyclerView(recyclerView);
         recyclerView.setAdapter(adapter);
-
-//        int swipePrice = 0;
-//        for(Order order : cart) {
-//            swipePrice += Integer.parseInt(order.getQuantity());
-//        }
-//
-//        mealSwipeTotal.setText(swipePrice + " Meal Swipe(s)");
     }
+
 }

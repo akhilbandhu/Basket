@@ -7,6 +7,7 @@ package com.myapps.toualbiamine.food2class.ViewHolder;
     4. Do ur thing in FoodList.
  */
 
+import android.graphics.Typeface;
 import android.support.annotation.NonNull;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
@@ -24,13 +25,14 @@ public class OrderViewHolder extends RecyclerView.ViewHolder implements View.OnC
 
     public OrderViewHolder(@NonNull View itemView) {
         super(itemView);
-
         orderID = (TextView) itemView.findViewById(R.id.orderID);
         orderStatus = (TextView) itemView.findViewById(R.id.orderStatus);
         orderMenu = (TextView) itemView.findViewById(R.id.orderMenu);
-
         itemView.setOnClickListener(this);
-
+        Typeface font = Typeface.createFromAsset(itemView.getContext().getAssets(), "fonts/restaurant_font.otf");
+        orderID.setTypeface(font);
+        orderStatus.setTypeface(font);
+        orderMenu.setTypeface(font);
     }
 
     public void setItemClickListener(ItemClickListener itemClickListener) {
@@ -41,6 +43,6 @@ public class OrderViewHolder extends RecyclerView.ViewHolder implements View.OnC
     public void onClick(View v) {
     //No onClick => otherwise it throws an error.
        //itemClickListener.onClick(v, getAdapterPosition(), false);
-
     }
+
 }
